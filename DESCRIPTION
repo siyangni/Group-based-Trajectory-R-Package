@@ -1,0 +1,30 @@
+Package: crimeTrajec
+Type: Package
+Title: Group-Based Trajectory Modeling for Longitudinal Criminology Data
+Version: 0.1.0
+Authors@R: c(
+    person("Author", "Name", email = "author@example.com", role = c("aut", "cre")),
+    person("Contributor", "Name", email = "contributor@example.com", role = "ctb"))
+Description: Implements group-based trajectory modeling for longitudinal criminology
+    data using finite mixture models. The package provides tools for fitting trajectory
+    models with various distributions (Poisson, zero-inflated Poisson, Gaussian),
+    selecting the optimal number of trajectory groups using information criteria and
+    cross-validation, and visualizing results. Methods are based on Nagin (2005)
+    <doi:10.4159/9780674041318> and Jones et al. (2001) <doi:10.1111/j.1467-9531.2001.tb00003.x>.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Depends:
+    R (>= 3.5.0)
+Imports:
+    stats,
+    graphics,
+    MASS
+Suggests:
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+VignetteBuilder: knitr
+RoxygenNote: 7.2.0
+URL: https://github.com/yourusername/crimeTrajec
+BugReports: https://github.com/yourusername/crimeTrajec/issues

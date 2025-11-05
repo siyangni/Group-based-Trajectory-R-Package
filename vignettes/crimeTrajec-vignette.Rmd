@@ -1,0 +1,539 @@
+---
+title: "Introduction to crimeTrajec: Group-Based Trajectory Modeling"
+author: "crimeTrajec Package Authors"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduction to crimeTrajec: Group-Based Trajectory Modeling}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+## Introduction
+
+Group-based trajectory modeling (GBTM) is a specialized application of finite mixture modeling designed to identify distinct developmental trajectories in longitudinal data. Originally developed for criminological research, GBTM has become widely used across social sciences to understand heterogeneity in developmental patterns over time.
+
+### What is Group-Based Trajectory Modeling?
+
+Traditional longitudinal methods often assume that all individuals follow a single average trajectory or that individual differences can be captured by random effects around a common mean. In contrast, GBTM assumes that the population consists of distinct subgroups, each following its own developmental trajectory. This approach is particularly useful when:
+
+1. Theoretical or empirical reasons suggest distinct subpopulations
+2. Individual trajectories show markedly different patterns
+3. The goal is to identify and characterize qualitatively different developmental pathways
+
+### Applications in Criminology
+
+In criminology, GBTM has been instrumental in identifying distinct patterns of criminal behavior over the life course. For example, Moffitt's developmental taxonomy proposes two main groups:
+
+- **Adolescence-limited offenders**: Individuals whose offending is concentrated in the teenage years
+- **Life-course-persistent offenders**: Individuals who begin offending early and continue throughout life
+
+GBTM provides a statistical framework for testing such theories and identifying additional trajectory groups that may exist in the data.
+
+### The crimeTrajec Package
+
+The **crimeTrajec** package provides an open-source implementation of group-based trajectory modeling in R. Key features include:
+
+- Support for multiple distributions (Poisson, zero-inflated Poisson, Gaussian)
+- Flexible polynomial trajectory specification
+- Model selection tools (BIC, AIC, cross-validation)
+- Integration with standard R workflows
+- Clear visualization of trajectory groups
+
+This vignette demonstrates how to use the package for trajectory analysis.
+
+## Installation
+
+To install the package from CRAN:
+
+```{r eval=FALSE}
+install.packages("crimeTrajec")
+```
+
+For the development version from GitHub:
+
+```{r eval=FALSE}
+# install.packages("devtools")
+devtools::install_github("yourusername/crimeTrajec")
+```
+
+Load the package:
+
+```{r eval=FALSE}
+library(crimeTrajec)
+```
+
+## Getting Started
+
+### Example Data
+
+The package includes a simulated dataset of longitudinal crime data for 250 individuals observed across 10 time points (ages 10-19). Load the data:
+
+```{r eval=FALSE}
+data(crime_data)
+head(crime_data)
+```
+
+The dataset contains:
+
+- `id`: Individual identifier
+- `age`: Age at observation (10-19 years)
+- `offense_count`: Number of offenses (count outcome)
+- `male`: Gender indicator (1 = male, 0 = female)
+- `risk_score`: Baseline risk factor (standardized)
+
+### Exploratory Data Analysis
+
+Before fitting trajectory models, examine the raw data:
+
+```{r eval=FALSE}
+# Plot trajectories for 20 randomly selected individuals
+set.seed(123)
+sample_ids <- sample(unique(crime_data$id), 20)
+
+plot(0, 0, type = "n", xlim = c(10, 19), ylim = c(0, 15),
+     xlab = "Age", ylab = "Offense Count",
+     main = "Sample Individual Trajectories")
+
+for (id in sample_ids) {
+  ind_data <- subset(crime_data, id == id)
+  lines(ind_data$age, ind_data$offense_count, col = "gray70")
+}
+```
+
+The heterogeneity in individual trajectories motivates the use of group-based modeling.
+
+## Basic Usage
+
+### Fitting a Trajectory Model
+
+The main function is `fitTrajectory()`. Here we fit a 3-group model with quadratic trajectories using a zero-inflated Poisson distribution:
+
+```{r eval=FALSE}
+# Fit 3-group model
+fit3 <- fitTrajectory(
+  data = crime_data,
+  id = "id",
+  time = "age",
+  outcome = "offense_count",
+  dist = "zip",
+  groups = 3,
+  degree = 2,
+  zero_inflated = TRUE,
+  verbose = TRUE
+)
+```
+
+### Examining Model Output
+
+Print the model summary:
+
+```{r eval=FALSE}
+print(fit3)
+```
+
+This displays:
+
+- Model specification (distribution, groups, polynomial degree)
+- Fit statistics (log-likelihood, AIC, BIC)
+- Convergence information
+- Estimated group proportions
+- Trajectory coefficients for each group
+
+### Visualizing Trajectories
+
+Plot the estimated trajectories:
+
+```{r eval=FALSE}
+plot(fit3, include_ci = TRUE, main = "Three-Group Trajectory Model")
+```
+
+To overlay observed data:
+
+```{r eval=FALSE}
+plot(fit3, include_ci = TRUE, observed = TRUE,
+     main = "Estimated Trajectories with Observed Data")
+```
+
+The plot shows:
+
+- Estimated trajectory for each group (colored lines)
+- Confidence intervals (shaded regions)
+- Group proportions in the legend
+- Optional: Individual observed trajectories (gray lines)
+
+### Group Membership
+
+Extract posterior probabilities of group membership:
+
+```{r eval=FALSE}
+# Posterior probabilities
+posterior_probs <- predict(fit3, type = "group")
+head(posterior_probs)
+
+# Most likely group assignment
+group_assignment <- predict(fit3, type = "class")
+table(group_assignment)
+```
+
+Individuals are assigned to the group with the highest posterior probability, but soft assignments (probabilities) preserve uncertainty.
+
+## Model Selection
+
+A critical question in trajectory modeling is: How many groups are present in the data?
+
+### Using Information Criteria
+
+The Bayesian Information Criterion (BIC) is recommended for mixture models. Compare models with different numbers of groups:
+
+```{r eval=FALSE}
+# Fit models with 1-5 groups
+comparison <- selectNumGroups(
+  data = crime_data,
+  id = "id",
+  time = "age",
+  outcome = "offense_count",
+  max_groups = 5,
+  criteria = c("BIC", "AIC"),
+  dist = "zip",
+  degree = 2,
+  verbose = TRUE
+)
+
+print(comparison)
+```
+
+Visualize the BIC values:
+
+```{r eval=FALSE}
+plot(comparison$num_groups, comparison$BIC, type = "b", lwd = 2,
+     xlab = "Number of Groups", ylab = "BIC",
+     main = "Model Selection via BIC")
+points(comparison$num_groups[which.min(comparison$BIC)],
+       min(comparison$BIC), pch = 19, col = "red", cex = 2)
+```
+
+The model with the lowest BIC is preferred.
+
+### Cross-Validation
+
+For a more robust approach, use cross-validation:
+
+```{r eval=FALSE}
+# This is computationally intensive
+comparison_cv <- selectNumGroups(
+  data = crime_data,
+  id = "id",
+  time = "age",
+  outcome = "offense_count",
+  max_groups = 4,
+  criteria = c("BIC", "CVE"),
+  cv_folds = 5,
+  dist = "zip",
+  degree = 2,
+  verbose = TRUE
+)
+
+print(comparison_cv)
+```
+
+Cross-validation can provide better out-of-sample performance assessment, though it is more computationally expensive.
+
+## Advanced Features
+
+### Different Distributions
+
+The package supports multiple distributions:
+
+#### Poisson (for count data without excess zeros)
+
+```{r eval=FALSE}
+fit_poisson <- fitTrajectory(
+  data = crime_data,
+  id = "id",
+  time = "age",
+  outcome = "offense_count",
+  dist = "poisson",
+  groups = 3,
+  degree = 2,
+  zero_inflated = FALSE
+)
+```
+
+#### Zero-Inflated Poisson (for count data with excess zeros)
+
+```{r eval=FALSE}
+fit_zip <- fitTrajectory(
+  data = crime_data,
+  id = "id",
+  time = "age",
+  outcome = "offense_count",
+  dist = "zip",
+  groups = 3,
+  degree = 2,
+  zero_inflated = TRUE
+)
+```
+
+#### Gaussian (for continuous outcomes)
+
+```{r eval=FALSE}
+fit_gaussian <- fitTrajectory(
+  data = continuous_outcome_data,
+  id = "id",
+  time = "time",
+  outcome = "score",
+  dist = "gaussian",
+  groups = 3,
+  degree = 2
+)
+```
+
+### Polynomial Degree Selection
+
+The polynomial degree determines the shape complexity of trajectories:
+
+- **Degree 0**: Intercept only (flat trajectories)
+- **Degree 1**: Linear trajectories
+- **Degree 2**: Quadratic (one curve/bend)
+- **Degree 3**: Cubic (two curves/bends)
+
+```{r eval=FALSE}
+# Linear trajectories
+fit_linear <- fitTrajectory(
+  data = crime_data,
+  id = "id",
+  time = "age",
+  outcome = "offense_count",
+  groups = 3,
+  degree = 1
+)
+
+# Cubic trajectories
+fit_cubic <- fitTrajectory(
+  data = crime_data,
+  id = "id",
+  time = "age",
+  outcome = "offense_count",
+  groups = 3,
+  degree = 3
+)
+
+# Compare via BIC
+c(Linear = fit_linear$BIC, Quadratic = fit3$BIC, Cubic = fit_cubic$BIC)
+```
+
+Higher degrees allow more flexibility but increase the risk of overfitting.
+
+### Incorporating Covariates
+
+Covariates can be included to model how individual characteristics affect group membership or trajectory shape:
+
+```{r eval=FALSE}
+# Covariates affecting group membership
+fit_cov <- fitTrajectory(
+  data = crime_data,
+  id = "id",
+  time = "age",
+  outcome = "offense_count",
+  groups = 3,
+  degree = 2,
+  group_cov = ~ male + risk_score
+)
+```
+
+Note: Covariate functionality is under development in the current version.
+
+## Technical Details
+
+### Model Specification
+
+The group-based trajectory model assumes the population consists of $K$ latent groups. For individual $i$ at time $t$:
+
+$$P(Y_{it} | \text{Group } k) = f(Y_{it}; \theta_{kit})$$
+
+where $f$ is the probability distribution and $\theta_{kit}$ are group- and time-specific parameters.
+
+#### Zero-Inflated Poisson Model
+
+For count data with excess zeros:
+
+$$P(Y_{it} = y | \text{Group } k) = \begin{cases}
+\psi_k + (1 - \psi_k) e^{-\lambda_{kit}} & \text{if } y = 0 \\
+(1 - \psi_k) \frac{\lambda_{kit}^y e^{-\lambda_{kit}}}{y!} & \text{if } y > 0
+\end{cases}$$
+
+where:
+
+- $\psi_k$ is the probability of a structural zero for group $k$
+- $\lambda_{kit} = \exp(\beta_{k0} + \beta_{k1} t + \beta_{k2} t^2 + \cdots)$ is the Poisson mean
+
+#### Gaussian Model
+
+For continuous outcomes:
+
+$$Y_{it} | \text{Group } k \sim N(\mu_{kit}, \sigma_k^2)$$
+
+where $\mu_{kit} = \beta_{k0} + \beta_{k1} t + \beta_{k2} t^2 + \cdots$
+
+### Estimation: EM Algorithm
+
+Parameters are estimated using the Expectation-Maximization (EM) algorithm:
+
+1. **E-step**: Compute posterior probabilities of group membership for each individual:
+
+$$P(\text{Group } k | Y_i) = \frac{\pi_k \prod_t f(Y_{it}; \theta_{kit})}{\sum_{k'=1}^K \pi_{k'} \prod_t f(Y_{it}; \theta_{k'it})}$$
+
+2. **M-step**: Update parameters by maximizing the weighted log-likelihood:
+
+- Group proportions: $\pi_k = \frac{1}{N} \sum_i P(\text{Group } k | Y_i)$
+- Trajectory parameters: Estimated via weighted regression (Gaussian) or iterative weighted least squares (Poisson)
+
+The algorithm iterates until convergence (change in log-likelihood < tolerance).
+
+### Model Diagnostics
+
+#### Convergence
+
+Check that the model converged:
+
+```{r eval=FALSE}
+fit3$converged  # Should be TRUE
+fit3$iterations # Number of EM iterations
+```
+
+If convergence fails, try:
+
+- Different starting values
+- Reducing the number of groups
+- Simplifying the polynomial degree
+- Checking data for issues (e.g., very sparse outcomes)
+
+#### Fit Assessment
+
+Compare models using information criteria:
+
+```{r eval=FALSE}
+# Lower is better
+fit3$BIC
+fit3$AIC
+```
+
+#### Group Separation
+
+Examine posterior probabilities to assess how well individuals are classified:
+
+```{r eval=FALSE}
+# Average maximum posterior probability
+mean(apply(predict(fit3, type = "group"), 1, max))
+```
+
+Values close to 1 indicate clear group separation; values near 1/K suggest poor separation.
+
+## Interpretation Guidelines
+
+### Characterizing Trajectory Groups
+
+After fitting a model, interpret each group:
+
+1. **Shape**: Examine the polynomial coefficients or plot to describe the developmental pattern (e.g., increasing, decreasing, stable, peaked)
+
+2. **Level**: What is the average level of the outcome for this group?
+
+3. **Prevalence**: What proportion of the population belongs to this group?
+
+4. **Membership**: Which individuals are most likely in this group? Examine their characteristics.
+
+Example interpretation:
+
+```{r eval=FALSE}
+print(fit3)
+```
+
+Suppose the output shows:
+
+- **Group 1 (58%)**: Low, stable trajectory - represents individuals with consistently low offending
+- **Group 2 (32%)**: Adolescence-peaked - offending rises in early teens and declines by late teens
+- **Group 3 (10%)**: High, chronic - persistently high offending across all ages
+
+### Substantive vs. Statistical Significance
+
+Note that trajectory groups are statistical constructs. Their substantive importance depends on:
+
+- Theoretical relevance
+- Practical differences between groups
+- Replication across samples
+
+Avoid over-interpreting small or poorly separated groups.
+
+## Limitations and Considerations
+
+### Number of Groups
+
+Group-based modeling assumes discrete latent groups. In reality, development may be more continuous. Use model selection tools, but also consider:
+
+- Theory about expected number of groups
+- Interpretability of the solution
+- Stability across samples
+
+### Sample Size
+
+Trajectory modeling requires adequate sample size:
+
+- Minimum: 200-300 individuals for simple models
+- Larger samples needed for: more groups, complex trajectories, rare outcomes
+
+### Missing Data
+
+The current implementation assumes missing data are missing completely at random (MCAR). If data are missing not at random (MNAR), results may be biased. Consider:
+
+- Examining patterns of missingness
+- Using multiple imputation if missingness is systematic
+- Sensitivity analyses
+
+### Model Assumptions
+
+Trajectory models assume:
+
+- Group membership is time-invariant (individuals don't switch groups)
+- Within-group trajectories follow the specified functional form (polynomial)
+- Observations are conditionally independent given group membership
+
+Violations of these assumptions may affect results.
+
+## References
+
+Jones, B. L., Nagin, D. S., & Roeder, K. (2001). A SAS procedure based on mixture models for estimating developmental trajectories. Sociological Methods & Research, 29(3), 374-393.
+
+Moffitt, T. E. (1993). Adolescence-limited and life-course-persistent antisocial behavior: A developmental taxonomy. Psychological Review, 100(4), 674-701.
+
+Nagin, D. S. (2005). Group-based modeling of development. Harvard University Press.
+
+Nagin, D. S., & Land, K. C. (1993). Age, criminal careers, and population heterogeneity: Specification and estimation of a nonparametric, mixed Poisson model. Criminology, 31(3), 327-362.
+
+Nagin, D. S., & Odgers, C. L. (2010). Group-based trajectory modeling in clinical research. Annual Review of Clinical Psychology, 6, 109-138.
+
+Nielsen, J. D., Rosenthal, J. S., Sun, Y., Day, D. M., Bevc, I., & Duchesne, T. (2014). Group-based criminal trajectory analysis using cross-validation criteria. Communications in Statistics - Theory and Methods, 43(20), 4337-4356.
+
+Piquero, A. R. (2008). Taking stock of developmental trajectories of criminal activity over the life course. In A. M. Liberman (Ed.), The long view of crime: A synthesis of longitudinal research (pp. 23-78). Springer.
+
+## Conclusion
+
+The **crimeTrajec** package provides accessible tools for group-based trajectory modeling in R. This vignette has demonstrated:
+
+- Basic model fitting and visualization
+- Model selection strategies
+- Advanced options for distributions and polynomial specification
+- Technical details of the estimation procedure
+- Guidelines for interpretation
+
+For questions, bug reports, or feature requests, please visit the package GitHub repository or contact the maintainers.
